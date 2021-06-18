@@ -79,8 +79,13 @@ function getEvents() {
                             res.plugindata.data.publishers.forEach(p=>attachPlugin(p.id));                            
                         }
                     }
-                    if ((res.plugindata.data.videoroom === "attached") && res.jsep) {                        
+                    if ((res.plugindata.data.videoroom === "attached") && res.jsep) {
                         console.log("got sdp from janus ", res);
+                        let remoteVideo = document.createElement("video");
+                        remoteVideo.setAttribute("autoplay", "true");
+                        remoteVideo.setAttribute("playsinline", "true");
+                        remoteVideo.setAttribute("width", "250px");
+                        remoteVideo.setAttribute("height", "250px");
 
                         const mediaConstraints = {
                             mandatory: {
@@ -117,14 +122,8 @@ function getEvents() {
                             })
 
                         peer.ontrack = function (event) {
-                            console.log("Remote track: ", event);
-                            let remoteVideo = document.createElement("video");
-                            remoteVideo.setAttribute("autoplay", "true");
-                            remoteVideo.setAttribute("playsinline", "true");
-                            remoteVideo.setAttribute("width", "250px");
-                            remoteVideo.setAttribute("height", "250px");
+                            console.log("Remote track: ", event);                            
                             remoteVideo.srcObject = event.streams[0];
-
                             const parent = document.getElementById("remote-video");
                             parent.appendChild(remoteVideo);
                         }
