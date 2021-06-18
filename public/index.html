@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="index.css" />
+    <title>Video Conference</title>
+</head>
+<body>
+    
+    <div id="userId"></div>
+    <div class="remote-video">
+        <div>Call:</div>
+        <video id="remoteVideo" playsinline autoplay></video>
+    </div>
+    <div class="local-video">
+        <div>Me:</div>
+        <video id="localVideo" playsinline autoplay muted></video>
+    </div>
+
+    <div>
+        Users:
+    </div>
+    <div id="usersList">
+        No users connected
+    </div>
+
+    <div>
+        <div id="call">Call</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.3.2/uuid.min.js"></script>
+    <script src="index.js"></script>
+</body>
+</html>
