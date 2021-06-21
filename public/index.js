@@ -1,5 +1,5 @@
-var janus_hostname = "192.168.1.109";
-// var janus_hostname = "34.83.95.233";
+// var janus_hostname = "192.168.1.109";
+var janus_hostname = "34.83.95.233";
 var janus_port = 8088;
 var apisecret = "ZjNjY2JiODhiZjU1NDA0NDk3ZGViMGZlYjQwMDY0OGUuNWUyMGE0YmU5MjgzNDRmMDkwZWE1ZGYzMzFjNDExMGI=.7a086d1b1a82ef0e708a1970c1d93fa0eead676bf14ed2d235a76f20ebdb3c213f1ee20bf69926dc9df8a571973fb1afa1193bd19d6d028e11651b09ef53c114";
 var session_id = null;
@@ -65,8 +65,8 @@ function sendSDP(sessionId, pluginId, jsep){
         "transaction": transaction,
         "body": {
             "request": "publish",
-            // "audio": true,
-            // "video": true
+            "audio": true,
+            "video": true
         },
         jsep: jsep
     };
@@ -80,6 +80,7 @@ function sendSDP(sessionId, pluginId, jsep){
     })
 }
 
+let localPeer;
 function getEvents() {
     const path = '/janus/' + session_id + '?maxev=1';
     const url = "http://" + janus_hostname + ":" + janus_port + path;
@@ -102,7 +103,7 @@ function getEvents() {
                                 offerToReceiveVideo: true,
                                 iceRestart: true                         
                         }
-                        const localPeer = new RTCPeerConnection({
+                        localPeer = new RTCPeerConnection({
                             iceServers: [
                                 {
                                     urls: "stun:stun.stunprotocol.org"
@@ -135,6 +136,15 @@ function getEvents() {
                         }
                     }
                     if(res.plugindata.data.videoroom === "event") {
+                        if (res.plugindata.data.configured === 'ok') {
+                            console.log("Publisher configured ...");
+                            if(res.jsep){
+                                localPeer.setRemoteDescription(res.jsep)
+                                .then(()=>{
+                                    console.log("Set Remote.");
+                                })
+                            }
+                        }
                         var length = res.plugindata.data.publishers && res.plugindata.data.publishers.length;
                         if (length) {
                             console.log("Got a new publishers ", res.plugindata.data.publishers);
