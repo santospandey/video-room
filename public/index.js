@@ -101,7 +101,7 @@ function getEvents() {
                         const mediaConstraints = {                            
                                 offerToReceiveAudio: true,
                                 offerToReceiveVideo: true,
-                                iceRestart: true                         
+                                iceRestart: true
                         }
                         localPeer = new RTCPeerConnection({
                             iceServers: [
@@ -109,7 +109,7 @@ function getEvents() {
                                     urls: "stun:stun.stunprotocol.org"
                                 }
                             ]
-                        });                        
+                        });
 
                         localPeer.createOffer(mediaConstraints)
                         .then(offer => localPeer.setLocalDescription(offer))
