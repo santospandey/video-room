@@ -24,6 +24,8 @@ function createSession() {
         })
 }
 
+var localPeer;
+
 /**
  * @param {*} publisherId 
  * Attach plugin to Janus 
@@ -51,13 +53,86 @@ function attachPlugin(publisherId) {
                     joinVideoRoom("subscriber", handleId, publisherId);
                 }
                 else {
+                    const mediaConstraints = {
+                        offerToReceiveAudio: true,
+                        offerToReceiveVideo: true,
+                        iceRestart: true
+                    }
+                    localPeer = new RTCPeerConnection({
+                        iceServers: [
+                            {
+                                urls: "stun:stun.stunprotocol.org"
+                            }
+                        ]
+                    });
+
+                    localPeer.toSendCandidatesLocal = [];
+
+                    localPeer.onicecandidate = (event) => {
+                        if (!event.candidate) {
+                            localPeer.toSendCandidatesLocal.push({ completed: true });
+                          } else {
+                            const candidate = {
+                              candidate: event.candidate.candidate,
+                              sdpMid: event.candidate.sdpMid,
+                              sdpMLineIndex: event.candidate.sdpMLineIndex,
+                            };
+                            localPeer.toSendCandidatesLocal.push(candidate);
+                          }
+                    }
+
+                    localPeer.onnegotiationneeded = async () => {
+                        localPeer.createOffer(mediaConstraints)
+                            .then(offer => localPeer.setLocalDescription(offer))
+                            .then(() => {
+                                sendSDP(res.session_id, res.data.id, localPeer.localDescription);
+                                // sendTrickleRequestLocal(res.session_id, res.data.id);
+                            })
+                            .catch(err => {
+                                console.log("Error while creating offer ", err);
+                            })
+                    }
+
+                    if (navigator && navigator.mediaDevices) {
+                        const constraints = {
+                            audio: true,
+                            video: true
+                        };
+                        navigator.mediaDevices.getUserMedia(constraints)
+                            .then(stream => {
+                                stream.getTracks().forEach(track => {
+                                    localPeer.addTrack(track, stream);
+                                })
+                                const localVideo = document.getElementById("localVideo");
+                                localVideo.srcObject = stream;
+                            })
+                    }
+
                     joinVideoRoom("publisher", handleId);
                 }
             }
         })
 }
 
-function sendSDP(sessionId, pluginId, jsep){
+function sendTrickleRequestLocal(sessionId, handelId){
+    var transaction = uuid.v4();
+    var request = {
+        "janus": "trickle",
+        "apisecret": apisecret,
+        "transaction": transaction,
+        "candidates": localPeer.toSendCandidatesLocal
+    };
+    const path = "/janus/" + sessionId + "/" + handelId;
+    postData(path, request)
+        .then(res => {
+            console.log("successful trickle");
+        })
+        .catch(err => {
+            console.log("Error trickle ", err);
+        })
+}
+
+function sendSDP(sessionId, pluginId, jsep) {
     var transaction = uuid.v4();
     var request = {
         "janus": "message",
@@ -72,15 +147,14 @@ function sendSDP(sessionId, pluginId, jsep){
     };
     const path = "/janus/" + sessionId + "/" + pluginId;
     postData(path, request)
-    .then(res => {
-        console.log("Successful sdp answer ", res);
-    })
-    .catch(err => {
-        console.log("Error while sdp answer ", err);
-    })
+        .then(res => {
+            console.log("Successful sdp answer ", res);
+        })
+        .catch(err => {
+            console.log("Error while sdp answer ", err);
+        })
 }
 
-let localPeer;
 function getEvents() {
     const path = '/janus/' + session_id + '?maxev=1';
     const url = "http://" + janus_hostname + ":" + janus_port + path;
@@ -96,59 +170,23 @@ function getEvents() {
             var janus_result = res.janus;
             if (janus_result == "event") {
                 if (res.plugindata && res.plugindata.data) {
-                    if(res.plugindata.data.videoroom === "joined"){
+                    if (res.plugindata.data.videoroom === "joined") {
                         console.log("Joined as a publisher now create sdp offer");
-                        const mediaConstraints = {                            
-                                offerToReceiveAudio: true,
-                                offerToReceiveVideo: true,
-                                iceRestart: true
-                        }
-                        localPeer = new RTCPeerConnection({
-                            iceServers: [
-                                {
-                                    urls: "stun:stun.stunprotocol.org"
-                                }
-                            ]
-                        });
-
-                        localPeer.createOffer(mediaConstraints)
-                        .then(offer => localPeer.setLocalDescription(offer))
-                        .then(() => {
-                            sendSDP(res.session_id, res.sender, localPeer.localDescription);                            
-                        })
-                        .catch(err => {
-                            console.log("Error while creating offer ", err);
-                        })
-
-                        if(navigator && navigator.mediaDevices){
-                            const constraints = {
-                                audio: true,
-                                video: true
-                            };
-                            navigator.mediaDevices.getUserMedia(constraints)
-                            .then(stream => {
-                                stream.getTracks().forEach(track => {
-                                    localPeer.addTrack(track, stream);
-                                })
-                                const localVideo = document.getElementById("localVideo");
-                                localVideo.srcObject = stream;
-                            })
-                        }
                     }
-                    if(res.plugindata.data.videoroom === "event") {
+                    if (res.plugindata.data.videoroom === "event") {
                         if (res.plugindata.data.configured === 'ok') {
                             console.log("Publisher configured ...");
-                            if(res.jsep){
+                            if (res.jsep) {
                                 localPeer.setRemoteDescription(res.jsep)
-                                .then(()=>{
-                                    console.log("Set Remote.");
-                                })
+                                    .then(() => {
+                                        console.log("Set Remote.");
+                                    })
                             }
                         }
                         var length = res.plugindata.data.publishers && res.plugindata.data.publishers.length;
                         if (length) {
                             console.log("Got a new publishers ", res.plugindata.data.publishers);
-                            res.plugindata.data.publishers.forEach(p=>attachPlugin(p.id));                            
+                            res.plugindata.data.publishers.forEach(p => attachPlugin(p.id));
                         }
                     }
                     if ((res.plugindata.data.videoroom === "attached") && res.jsep) {
@@ -185,7 +223,7 @@ function getEvents() {
                             })
                             .then(() => {
                                 let publisher = publishers.find((p) => (p.publisherId == res.plugindata.data.id));
-                                if(publisher){
+                                if (publisher) {
                                     sendAnswer(publisher.handleId, peer.localDescription.sdp);
                                 }
                             })
@@ -194,7 +232,7 @@ function getEvents() {
                             })
 
                         peer.ontrack = function (event) {
-                            console.log("Remote track: ", event);                            
+                            console.log("Remote track: ", event);
                             remoteVideo.srcObject = event.streams[0];
                             const parent = document.getElementById("remote-video");
                             parent.appendChild(remoteVideo);
@@ -251,7 +289,7 @@ function joinVideoRoom(type, handleId, publisherId) {
             "ptype": type,
             "room": 1234,
             "audio": true,
-            "video": true            
+            "video": true
         }
     };
 
