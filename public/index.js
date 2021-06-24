@@ -208,6 +208,10 @@ function handleEvents(res, localPeer) {
                         attachPlugin(res.session_id)
                             .then(handle => {
                                 if (handle.janus === "success") {
+                                    publishers.push({
+                                        "handleId": handle.data.id,
+                                        "publisherId": p.id
+                                    });
                                     joinVideoRoom("subscriber", res.session_id, handle.data.id, p.id)
                                         .then(response => {
                                             if (response.janus === "ack") {
@@ -252,10 +256,10 @@ function handleEvents(res, localPeer) {
                         return remotePeer.setLocalDescription(offer);
                     })
                     .then(() => {
-                        // let publisher = publishers.find((p) => (p.publisherId == res.plugindata.data.id));
-                        // if (publisher) {
-                        //     sendAnswer(publisher.handleId, remotePeer.localDescription.sdp);
-                        // }
+                        let publisher = publishers.find((p) => (p.publisherId == res.plugindata.data.id));
+                        if (publisher) {
+                            sendAnswer(res.session_id, publisher.handleId, remotePeer.localDescription.sdp);
+                        }
                         
                         // sendAnswer(res.session_id, res.sender, remotePeer.localDescription.sdp);
 
