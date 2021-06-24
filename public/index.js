@@ -186,7 +186,7 @@ function getEvents(sessionId, localPeer) {
         })
 }
 
-function handleEvents(res, localPeer) {
+async function handleEvents(res, localPeer) {
     var janus_result = res.janus;
     if (janus_result == "event") {
         if (res.plugindata && res.plugindata.data) {
@@ -205,8 +205,13 @@ function handleEvents(res, localPeer) {
                 }
                 var length = res.plugindata.data.publishers && res.plugindata.data.publishers.length;
                 if (length) {
-                    console.log("Got a new publishers ", res.plugindata.data.publishers);
-                    res.plugindata.data.publishers.forEach(p => attachPlugin(p.id));
+                    console.log("Got a new publishers ", res.plugindata.data.publishers);                    
+                    res.plugindata.data.publishers.forEach(p => {
+                        var handle = await attachPlugin(res.session_id);
+                        if(handle.janus === "success"){
+                            joinVideoRoom("subscriber", res.session_id, handle.data.id, p.id);
+                        }
+                    });
                 }
             }
             if ((res.plugindata.data.videoroom === "attached") && res.jsep) {
