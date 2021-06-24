@@ -3,7 +3,6 @@ var janus_hostname = "34.83.95.233";
 var janus_port = 8088;
 var apisecret = "ZjNjY2JiODhiZjU1NDA0NDk3ZGViMGZlYjQwMDY0OGUuNWUyMGE0YmU5MjgzNDRmMDkwZWE1ZGYzMzFjNDExMGI=.7a086d1b1a82ef0e708a1970c1d93fa0eead676bf14ed2d235a76f20ebdb3c213f1ee20bf69926dc9df8a571973fb1afa1193bd19d6d028e11651b09ef53c114";
 var session_id = null;
-var publishers = [];
 
 async function postData(path, data) {
     const url = "http://" + janus_hostname + ":" + janus_port + path;
@@ -208,11 +207,7 @@ function handleEvents(res, localPeer) {
                     res.plugindata.data.publishers.forEach(p => {
                         attachPlugin(res.session_id)
                             .then(handle => {
-                                if (handle.janus === "success") {
-                                    publishers.push({
-                                        "handleId": handle.data.id,
-                                        "publisherId": p.id
-                                    });
+                                if (handle.janus === "success") {                                    
                                     joinVideoRoom("subscriber", res.session_id, handle.data.id, p.id)
                                         .then(response => {
                                             if (response.janus === "ack") {
@@ -257,34 +252,13 @@ function handleEvents(res, localPeer) {
                         return remotePeer.setLocalDescription(offer);
                     })
                     .then(() => {
-                        debugger;
-                        let publisher = publishers.find((p) => (p.publisherId == res.plugindata.data.id));
-                        if (publisher) {
-                            sendAnswer(res.session_id, publisher.handleId, remotePeer.localDescription.sdp);
-                        }
-                        
-                        // sendAnswer(res.session_id, res.sender, remotePeer.localDescription.sdp);
-
-                        // joinVideoRoom("subscriber", res.session_id, res.sender, res.plugindata.data.id);
-                        // listPublishers(res.session_id, res.sender).then(response => {
-                        //     const janus_result = response.janus;
-                        //     if (janus_result === "success") {
-                        //         console.log("Successfully listed publishers ", response);
-                        //         const participants = response.plugindata.data.participants;
-                        //         publishers = participants.filter(par => par.publisher);
-                        //         console.log("publishers => ", publishers);
-                        //         if (publishers.length) {
-                        //             joinVideoRoom("subscriber", response.session_id, response.sender, publishers[0].id);
-                        //         }
-                        //     }
-                        // })
+                        sendAnswer(res.session_id, res.sender, remotePeer.localDescription.sdp);
                     })
                     .catch(err => {
                         console.log("Error => ", err);
                     })
 
                 remotePeer.ontrack = function (event) {
-                    debugger;
                     console.log("Remote track: ", event);
                     remoteVideo.srcObject = event.streams[0];
                     const parent = document.getElementById("remote-video");
@@ -293,35 +267,6 @@ function handleEvents(res, localPeer) {
             }
         }
     }
-}
-
-
-function listPublishers(sessionId, handleId) {
-    var transaction = uuid.v4();
-    var request = {
-        "janus": "message",
-        "apisecret": apisecret,
-        "transaction": transaction,
-        "body": {
-            "request": "listparticipants",
-            "room": 1234
-        }
-    };
-    var path = '/janus/' + sessionId + '/' + handleId;
-    return postData(path, request);
-
-    // .then(res => {
-    //     var janus_result = res.janus;
-    //     if (janus_result === "success") {
-    //         console.log("Successfully listed publishers ", res);
-    //         var participants = res.plugindata.data.participants;
-    //         publishers = participants.filter(par => par.publisher);
-    //         console.log("publishers => ", publishers);
-    //         if (publishers.length) {
-    //             joinVideoRoom("subscriber", handle_id, publishers[0].id);
-    //         }
-    //     }
-    // })
 }
 
 /**
@@ -341,7 +286,7 @@ function joinVideoRoom(type, sessionId, handleId, publisherId) {
             "ptype": type,
             "room": 1234,
             "audio": true,
-            "video": false
+            "video": true
         }
     };
 
@@ -354,8 +299,13 @@ function joinVideoRoom(type, sessionId, handleId, publisherId) {
     return postData(path, request);
 }
 
+/**
+ * send answer after receiving offer sdp from janus.
+ * @param {*} sessionId 
+ * @param {*} handleId 
+ * @param {*} sdp 
+ */
 function sendAnswer(sessionId, handleId, sdp) {
-    debugger;
     var transaction = uuid.v4();
     var request = {
         "janus": "message",
@@ -371,7 +321,7 @@ function sendAnswer(sessionId, handleId, sdp) {
         }
     };
 
-    var path = '/janus/' + session_id + '/' + handleId;
+    var path = '/janus/' + sessionId + '/' + handleId;
     postData(path, request)
         .then(res => {
             var janus_result = res.janus;
