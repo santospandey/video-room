@@ -5,6 +5,58 @@ var apisecret = "ZjNjY2JiODhiZjU1NDA0NDk3ZGViMGZlYjQwMDY0OGUuNWUyMGE0YmU5MjgzNDR
 var session_id = null;
 var publishers = [];
 
+async function postData(path, data) {
+    const url = "http://" + janus_hostname + ":" + janus_port + path;
+    const response = await fetch(url, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(data)
+    });
+    return response.json();
+}
+
+/**
+ * Main function to start videoroom.
+ */
+async function start() {
+    var session = await createSession();
+    if (session.janus !== "success") {
+        console.error("Error in creating session ", session);
+        return false;
+    }
+    console.log("Create session success ...", session);
+
+    var handle = await attachPlugin(session.data.id);
+    if (handle.janus !== "success") {
+        console.error("Error in attach plugin ", handle);
+        return false;
+    }
+    console.log("Attach videoroom plugin success...", handle);
+
+    const localPeer = startLocalPeer(true, true, session.data.id, handle.data.id);
+    const streams = await getMediaDevicesStream(true, true);
+
+    if (!streams || !(streams.getTracks()).length) {
+        console.error("Error in receiving streams ");
+        return false;
+    }
+    streams.getTracks().forEach(track => localPeer.addTrack(track, streams));
+    const localVideo = document.getElementById("localVideo");
+    localVideo.srcObject = streams;
+
+    const joinRoom = await joinVideoRoom("publisher", session.data.id, handle.data.id);
+    if (joinRoom.janus !== "ack") {
+        console.error("Error in joining videoroom as publisher ", joinRoom);
+        return false;
+    }
+    console.log("Join video room as publisher success...", joinRoom);
+    getEvents(session.data.id, localPeer);
+}
+
+start();
+
 /**
  * Create Session in Janus
  */
@@ -16,12 +68,7 @@ function createSession() {
         "transaction": transaction
     };
 
-    postData("/janus", request)
-        .then(res => {
-            session_id = res.data.id;
-            attachPlugin();
-            getEvents();
-        })
+    return postData("/janus", request);
 }
 
 var localPeer;
@@ -30,7 +77,7 @@ var localPeer;
  * @param {*} publisherId 
  * Attach plugin to Janus 
  */
-function attachPlugin(publisherId) {
+function attachPlugin(sessionId) {
     var transaction = uuid.v4();
     var request = {
         "janus": "attach",
@@ -38,83 +85,50 @@ function attachPlugin(publisherId) {
         "plugin": "janus.plugin.videoroom",
         "transaction": transaction
     };
-    var path = '/janus/' + session_id;
-    postData(path, request)
-        .then(res => {
-            var janus_result = res.janus;
-            if (janus_result === "success") {
-                console.log("Attach videoroom plugin success...", res);
-                var handleId = res.data.id;
-                if (publisherId) {
-                    publishers.push({
-                        "handleId": handleId,
-                        "publisherId": publisherId
-                    })
-                    joinVideoRoom("subscriber", handleId, publisherId);
-                }
-                else {
-                    const mediaConstraints = {
-                        offerToReceiveAudio: true,
-                        offerToReceiveVideo: true,
-                        iceRestart: true
-                    }
-                    localPeer = new RTCPeerConnection({
-                        iceServers: [
-                            {
-                                urls: "stun:stun.stunprotocol.org"
-                            }
-                        ]
-                    });
-
-                    localPeer.toSendCandidatesLocal = [];
-
-                    localPeer.onicecandidate = (event) => {
-                        if (!event.candidate) {
-                            localPeer.toSendCandidatesLocal.push({ completed: true });
-                          } else {
-                            const candidate = {
-                              candidate: event.candidate.candidate,
-                              sdpMid: event.candidate.sdpMid,
-                              sdpMLineIndex: event.candidate.sdpMLineIndex,
-                            };
-                            localPeer.toSendCandidatesLocal.push(candidate);
-                          }
-                    }
-
-                    localPeer.onnegotiationneeded = async () => {
-                        localPeer.createOffer(mediaConstraints)
-                            .then(offer => localPeer.setLocalDescription(offer))
-                            .then(() => {
-                                sendSDP(res.session_id, res.data.id, localPeer.localDescription);
-                                // sendTrickleRequestLocal(res.session_id, res.data.id);
-                            })
-                            .catch(err => {
-                                console.log("Error while creating offer ", err);
-                            })
-                    }
-
-                    if (navigator && navigator.mediaDevices) {
-                        const constraints = {
-                            audio: true,
-                            video: true
-                        };
-                        navigator.mediaDevices.getUserMedia(constraints)
-                            .then(stream => {
-                                stream.getTracks().forEach(track => {
-                                    localPeer.addTrack(track, stream);
-                                })
-                                const localVideo = document.getElementById("localVideo");
-                                localVideo.srcObject = stream;
-                            })
-                    }
-
-                    joinVideoRoom("publisher", handleId);
-                }
-            }
-        })
+    var path = '/janus/' + sessionId;
+    return postData(path, request);
 }
 
-function sendTrickleRequestLocal(sessionId, handelId){
+
+function startLocalPeer(offerAudio, offerVideo, sessionId, handleId) {
+    const mediaConstraints = {
+        offerToReceiveAudio: offerAudio,
+        offerToReceiveVideo: offerVideo,
+        iceRestart: true
+    }
+    const localPeer = new RTCPeerConnection({
+        iceServers: [
+            {
+                urls: "stun:stun.stunprotocol.org"
+            }
+        ]
+    });
+
+    localPeer.onnegotiationneeded = async () => {
+        localPeer.createOffer(mediaConstraints)
+            .then(offer => localPeer.setLocalDescription(offer))
+            .then(() => {
+                sendSDP(sessionId, handleId, localPeer.localDescription);
+            })
+            .catch(err => {
+                console.log("Error while creating offer ", err);
+            })
+    }
+
+    return localPeer;
+}
+
+function getMediaDevicesStream(audio, video) {
+    const constraints = {
+        "audio": audio,
+        "video": video
+    };
+    if (navigator && navigator.mediaDevices) {
+        return navigator.mediaDevices.getUserMedia(constraints);
+    }
+}
+
+function sendTrickleRequestLocal(sessionId, handelId) {
     var transaction = uuid.v4();
     var request = {
         "janus": "trickle",
@@ -155,8 +169,8 @@ function sendSDP(sessionId, pluginId, jsep) {
         })
 }
 
-function getEvents() {
-    const path = '/janus/' + session_id + '?maxev=1';
+function getEvents(sessionId, localPeer) {
+    const path = '/janus/' + sessionId + '?maxev=1';
     const url = "http://" + janus_hostname + ":" + janus_port + path;
     const response = fetch(url, {
         method: "GET",
@@ -167,110 +181,117 @@ function getEvents() {
         .then(data => data.json())
         .then(res => {
             console.log("get event from janus => ", res);
-            var janus_result = res.janus;
-            if (janus_result == "event") {
-                if (res.plugindata && res.plugindata.data) {
-                    if (res.plugindata.data.videoroom === "joined") {
-                        console.log("Joined as a publisher now create sdp offer");
-                    }
-                    if (res.plugindata.data.videoroom === "event") {
-                        if (res.plugindata.data.configured === 'ok') {
-                            console.log("Publisher configured ...");
-                            if (res.jsep) {
-                                localPeer.setRemoteDescription(res.jsep)
-                                    .then(() => {
-                                        console.log("Set Remote.");
-                                    })
-                            }
-                        }
-                        var length = res.plugindata.data.publishers && res.plugindata.data.publishers.length;
-                        if (length) {
-                            console.log("Got a new publishers ", res.plugindata.data.publishers);
-                            res.plugindata.data.publishers.forEach(p => attachPlugin(p.id));
-                        }
-                    }
-                    if ((res.plugindata.data.videoroom === "attached") && res.jsep) {
-                        console.log("got sdp from janus ", res);
-                        let remoteVideo = document.createElement("video");
-                        remoteVideo.setAttribute("autoplay", "true");
-                        remoteVideo.setAttribute("playsinline", "true");
-                        remoteVideo.setAttribute("width", "250px");
-                        remoteVideo.setAttribute("height", "250px");
-
-                        const mediaConstraints = {
-                            mandatory: {
-                                OfferToReceiveAudio: true,
-                                OfferToReceiveVideo: true,
-                            },
-                        };
-
-                        const peer = new RTCPeerConnection({
-                            iceServers: [
-                                {
-                                    urls: "stun:stun.stunprotocol.org"
-                                }
-                            ]
-                        });
-
-                        peer.setRemoteDescription(res.jsep)
-                            .then(() => {
-                                console.log("Answering offer ");
-                            })
-                        peer.createAnswer(mediaConstraints)
-                            .then(offer => {
-                                console.log("offer => ", offer);
-                                return peer.setLocalDescription(offer);
-                            })
-                            .then(() => {
-                                let publisher = publishers.find((p) => (p.publisherId == res.plugindata.data.id));
-                                if (publisher) {
-                                    sendAnswer(publisher.handleId, peer.localDescription.sdp);
-                                }
-                            })
-                            .catch(err => {
-                                console.log("Error => ", err);
-                            })
-
-                        peer.ontrack = function (event) {
-                            console.log("Remote track: ", event);
-                            remoteVideo.srcObject = event.streams[0];
-                            const parent = document.getElementById("remote-video");
-                            parent.appendChild(remoteVideo);
-                        }
-                    }
-                }
-            }
-
-            getEvents();
+            handleEvents(res, localPeer);
+            getEvents(sessionId, localPeer);
         })
 }
 
-// function listPublishers() {
-//     var transaction = uuid.v4();
-//     var request = {
-//         "janus": "message",
-//         "apisecret": apisecret,
-//         "transaction": transaction,
-//         "body": {
-//             "request": "listparticipants",
-//             "room": 1234
-//         }
-//     };
-//     var path = '/janus/' + session_id + '/' + handle_id;
-//     postData(path, request)
-//         .then(res => {
-//             var janus_result = res.janus;
-//             if (janus_result === "success") {
-//                 console.log("Successfully listed publishers ", res);
-//                 var participants = res.plugindata.data.participants;
-//                 publishers = participants.filter(par => par.publisher);
-//                 console.log("publishers => ", publishers);
-//                 if (publishers.length) {
-//                     joinVideoRoom("subscriber", handle_id, publishers[0].id);
-//                 }
-//             }
-//         })
-// }
+function handleEvents(res, localPeer) {
+    var janus_result = res.janus;
+    if (janus_result == "event") {
+        if (res.plugindata && res.plugindata.data) {
+            if (res.plugindata.data.videoroom === "joined") {
+                console.log("Joined as a publisher ...");
+            }
+            if (res.plugindata.data.videoroom === "event") {
+                if (res.plugindata.data.configured === 'ok') {
+                    console.log("Publisher configured ...");
+                    if (res.jsep) {
+                        localPeer.setRemoteDescription(res.jsep)
+                            .then(() => {
+                                console.log("Set Remote.");
+                            })
+                    }
+                }
+                var length = res.plugindata.data.publishers && res.plugindata.data.publishers.length;
+                if (length) {
+                    console.log("Got a new publishers ", res.plugindata.data.publishers);
+                    res.plugindata.data.publishers.forEach(p => attachPlugin(p.id));
+                }
+            }
+            if ((res.plugindata.data.videoroom === "attached") && res.jsep) {
+                console.log("got sdp from janus ", res);
+                let remoteVideo = document.createElement("video");
+                remoteVideo.setAttribute("autoplay", "true");
+                remoteVideo.setAttribute("playsinline", "true");
+                remoteVideo.setAttribute("width", "250px");
+                remoteVideo.setAttribute("height", "250px");
+
+                const mediaConstraints = {
+                    mandatory: {
+                        OfferToReceiveAudio: true,
+                        OfferToReceiveVideo: true,
+                    },
+                };
+
+                const remotePeer = new RTCPeerConnection({
+                    iceServers: [
+                        {
+                            urls: "stun:stun.stunprotocol.org"
+                        }
+                    ]
+                });
+
+                remotePeer.setRemoteDescription(res.jsep)
+                    .then(() => {
+                        console.log("Answering offer ");
+                    })
+                remotePeer.createAnswer(mediaConstraints)
+                    .then(offer => {
+                        console.log("offer => ", offer);
+                        return remotePeer.setLocalDescription(offer);
+                    })
+                    .then(() => {
+                        debugger;
+                        // let publisher = publishers.find((p) => (p.publisherId == res.plugindata.data.id));
+                        // if (publisher) {
+                        //     sendAnswer(publisher.handleId, remotePeer.localDescription.sdp);
+                        // }
+                        let publishers = listPublishers();
+                    })
+                    .catch(err => {
+                        console.log("Error => ", err);
+                    })
+
+                remotePeer.ontrack = function (event) {
+                    console.log("Remote track: ", event);
+                    remoteVideo.srcObject = event.streams[0];
+                    const parent = document.getElementById("remote-video");
+                    parent.appendChild(remoteVideo);
+                }
+            }
+        }
+    }
+}
+
+
+async function listPublishers(sessionId, handleId) {
+    var transaction = uuid.v4();
+    var request = {
+        "janus": "message",
+        "apisecret": apisecret,
+        "transaction": transaction,
+        "body": {
+            "request": "listparticipants",
+            "room": 1234
+        }
+    };
+    var path = '/janus/' + sessionId + '/' + handleId;
+    var response = await postData(path, request);
+    debugger;
+    // .then(res => {
+    //     var janus_result = res.janus;
+    //     if (janus_result === "success") {
+    //         console.log("Successfully listed publishers ", res);
+    //         var participants = res.plugindata.data.participants;
+    //         publishers = participants.filter(par => par.publisher);
+    //         console.log("publishers => ", publishers);
+    //         if (publishers.length) {
+    //             joinVideoRoom("subscriber", handle_id, publishers[0].id);
+    //         }
+    //     }
+    // })
+}
 
 /**
  * 
@@ -278,7 +299,7 @@ function getEvents() {
  * @param {*} handleId => handleId got after attach plugin
  * @param {*} publisherId => publisherId whose content to subscribed to.
  */
-function joinVideoRoom(type, handleId, publisherId) {
+function joinVideoRoom(type, sessionId, handleId, publisherId) {
     var transaction = uuid.v4();
     var request = {
         "janus": "message",
@@ -289,7 +310,7 @@ function joinVideoRoom(type, handleId, publisherId) {
             "ptype": type,
             "room": 1234,
             "audio": true,
-            "video": true
+            "video": false
         }
     };
 
@@ -297,15 +318,9 @@ function joinVideoRoom(type, handleId, publisherId) {
         request.body["feed"] = parseInt(publisherId);
     }
 
-    var path = '/janus/' + session_id + '/' + handleId;
+    var path = '/janus/' + sessionId + '/' + handleId;
 
-    postData(path, request)
-        .then(res => {
-            var janus_result = res.janus;
-            if (janus_result === "ack") {
-                console.log("Join videoroom success ", res);
-            }
-        })
+    return postData(path, request);
 }
 
 function sendAnswer(handleId, sdp) {
@@ -336,17 +351,3 @@ function sendAnswer(handleId, sdp) {
             }
         })
 }
-
-async function postData(path, data) {
-    const url = "http://" + janus_hostname + ":" + janus_port + path;
-    const response = await fetch(url, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify(data)
-    });
-    return response.json();
-}
-
-createSession();
