@@ -20,6 +20,7 @@ async function postData(path, data) {
  * Main function to start videoroom.
  */
 async function start() {
+    // create session.
     var session = await createSession();
     if (session.janus !== "success") {
         console.error("Error in creating session ", session);
@@ -28,6 +29,7 @@ async function start() {
     console.log("Create session success ...", session);
     session_id = session.data.id;
 
+    // attach plugin
     var handle = await attachPlugin(session.data.id);
     if (handle.janus !== "success") {
         console.error("Error in attach plugin ", handle);
@@ -35,7 +37,10 @@ async function start() {
     }
     console.log("Attach videoroom plugin success...", handle);
 
+    // start rtc peer connection.
     const localPeer = startLocalPeer(true, true, session.data.id, handle.data.id);
+
+    // get audio and video streams.
     const streams = await getMediaDevicesStream(true, true);
 
     if (!streams || !(streams.getTracks()).length) {
@@ -46,12 +51,15 @@ async function start() {
     const localVideo = document.getElementById("localVideo");
     localVideo.srcObject = streams;
 
+    // join videoroom as a publisher
     const joinRoom = await joinVideoRoom("publisher", session.data.id, handle.data.id);
     if (joinRoom.janus !== "ack") {
         console.error("Error in joining videoroom as publisher ", joinRoom);
         return false;
     }
     console.log("Join video room as publisher success...", joinRoom);
+
+    // Listen for events.
     getEvents(session.data.id, localPeer);
 }
 
@@ -87,7 +95,14 @@ function attachPlugin(sessionId) {
     return postData(path, request);
 }
 
-
+/**
+ * 
+ * @param {*} offerAudio 
+ * @param {*} offerVideo 
+ * @param {*} sessionId 
+ * @param {*} handleId 
+ * @returns 
+ */
 function startLocalPeer(offerAudio, offerVideo, sessionId, handleId) {
     const mediaConstraints = {
         offerToReceiveAudio: offerAudio,
@@ -116,6 +131,12 @@ function startLocalPeer(offerAudio, offerVideo, sessionId, handleId) {
     return localPeer;
 }
 
+/**
+ * 
+ * @param {*} audio 
+ * @param {*} video 
+ * @returns 
+ */
 function getMediaDevicesStream(audio, video) {
     const constraints = {
         "audio": audio,
@@ -126,6 +147,11 @@ function getMediaDevicesStream(audio, video) {
     }
 }
 
+/**
+ * 
+ * @param {*} sessionId 
+ * @param {*} handelId 
+ */
 function sendTrickleRequestLocal(sessionId, handelId) {
     var transaction = uuid.v4();
     var request = {
@@ -144,6 +170,12 @@ function sendTrickleRequestLocal(sessionId, handelId) {
         })
 }
 
+/**
+ * 
+ * @param {*} sessionId 
+ * @param {*} pluginId 
+ * @param {*} jsep 
+ */
 function sendSDP(sessionId, pluginId, jsep) {
     var transaction = uuid.v4();
     var request = {
@@ -167,6 +199,11 @@ function sendSDP(sessionId, pluginId, jsep) {
         })
 }
 
+/**
+ * 
+ * @param {*} sessionId 
+ * @param {*} localPeer 
+ */
 function getEvents(sessionId, localPeer) {
     const path = '/janus/' + sessionId + '?maxev=1';
     const url = "http://" + janus_hostname + ":" + janus_port + path;
@@ -184,6 +221,11 @@ function getEvents(sessionId, localPeer) {
         })
 }
 
+/**
+ * 
+ * @param {*} res 
+ * @param {*} localPeer 
+ */
 function handleEvents(res, localPeer) {
     var janus_result = res.janus;
     if (janus_result == "event") {
