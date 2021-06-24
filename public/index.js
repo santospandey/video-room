@@ -55,8 +55,6 @@ async function start() {
     getEvents(session.data.id, localPeer);
 }
 
-start();
-
 /**
  * Create Session in Janus
  */
@@ -186,7 +184,7 @@ function getEvents(sessionId, localPeer) {
         })
 }
 
-async function handleEvents(res, localPeer) {
+function handleEvents(res, localPeer) {
     var janus_result = res.janus;
     if (janus_result == "event") {
         if (res.plugindata && res.plugindata.data) {
@@ -205,12 +203,19 @@ async function handleEvents(res, localPeer) {
                 }
                 var length = res.plugindata.data.publishers && res.plugindata.data.publishers.length;
                 if (length) {
-                    console.log("Got a new publishers ", res.plugindata.data.publishers);                    
+                    console.log("Got a new publishers ", res.plugindata.data.publishers);
                     res.plugindata.data.publishers.forEach(p => {
-                        var handle = await attachPlugin(res.session_id);
-                        if(handle.janus === "success"){
-                            joinVideoRoom("subscriber", res.session_id, handle.data.id, p.id);
-                        }
+                        attachPlugin(res.session_id)
+                            .then(handle => {
+                                if (handle.janus === "success") {
+                                    joinVideoRoom("subscriber", res.session_id, handle.data.id, p.id)
+                                        .then(response => {
+                                            if (response.janus === "ack") {
+                                                console.log("Successfully joined videoroom as a subscriber");
+                                            }
+                                        })
+                                }
+                            })
                     });
                 }
             }
@@ -247,18 +252,33 @@ async function handleEvents(res, localPeer) {
                         return remotePeer.setLocalDescription(offer);
                     })
                     .then(() => {
-                        debugger;
                         // let publisher = publishers.find((p) => (p.publisherId == res.plugindata.data.id));
                         // if (publisher) {
                         //     sendAnswer(publisher.handleId, remotePeer.localDescription.sdp);
                         // }
-                        let publishers = listPublishers();
+                        
+                        // sendAnswer(res.session_id, res.sender, remotePeer.localDescription.sdp);
+
+                        // joinVideoRoom("subscriber", res.session_id, res.sender, res.plugindata.data.id);
+                        // listPublishers(res.session_id, res.sender).then(response => {
+                        //     const janus_result = response.janus;
+                        //     if (janus_result === "success") {
+                        //         console.log("Successfully listed publishers ", response);
+                        //         const participants = response.plugindata.data.participants;
+                        //         publishers = participants.filter(par => par.publisher);
+                        //         console.log("publishers => ", publishers);
+                        //         if (publishers.length) {
+                        //             joinVideoRoom("subscriber", response.session_id, response.sender, publishers[0].id);
+                        //         }
+                        //     }
+                        // })
                     })
                     .catch(err => {
                         console.log("Error => ", err);
                     })
 
                 remotePeer.ontrack = function (event) {
+                    debugger;
                     console.log("Remote track: ", event);
                     remoteVideo.srcObject = event.streams[0];
                     const parent = document.getElementById("remote-video");
@@ -270,7 +290,7 @@ async function handleEvents(res, localPeer) {
 }
 
 
-async function listPublishers(sessionId, handleId) {
+function listPublishers(sessionId, handleId) {
     var transaction = uuid.v4();
     var request = {
         "janus": "message",
@@ -282,8 +302,8 @@ async function listPublishers(sessionId, handleId) {
         }
     };
     var path = '/janus/' + sessionId + '/' + handleId;
-    var response = await postData(path, request);
-    debugger;
+    return postData(path, request);
+
     // .then(res => {
     //     var janus_result = res.janus;
     //     if (janus_result === "success") {
@@ -328,7 +348,7 @@ function joinVideoRoom(type, sessionId, handleId, publisherId) {
     return postData(path, request);
 }
 
-function sendAnswer(handleId, sdp) {
+function sendAnswer(sessionId, handleId, sdp) {
     var transaction = uuid.v4();
     var request = {
         "janus": "message",
@@ -344,7 +364,7 @@ function sendAnswer(handleId, sdp) {
         }
     };
 
-    var path = '/janus/' + session_id + '/' + handleId;
+    var path = '/janus/' + sessionId + '/' + handleId;
     postData(path, request)
         .then(res => {
             var janus_result = res.janus;
@@ -356,3 +376,5 @@ function sendAnswer(handleId, sdp) {
             }
         })
 }
+
+start();
