@@ -27,6 +27,7 @@ async function start() {
         return false;
     }
     console.log("Create session success ...", session);
+    session_id = session.data.id;
 
     var handle = await attachPlugin(session.data.id);
     if (handle.janus !== "success") {
@@ -256,6 +257,7 @@ function handleEvents(res, localPeer) {
                         return remotePeer.setLocalDescription(offer);
                     })
                     .then(() => {
+                        debugger;
                         let publisher = publishers.find((p) => (p.publisherId == res.plugindata.data.id));
                         if (publisher) {
                             sendAnswer(res.session_id, publisher.handleId, remotePeer.localDescription.sdp);
@@ -353,6 +355,7 @@ function joinVideoRoom(type, sessionId, handleId, publisherId) {
 }
 
 function sendAnswer(sessionId, handleId, sdp) {
+    debugger;
     var transaction = uuid.v4();
     var request = {
         "janus": "message",
@@ -368,7 +371,7 @@ function sendAnswer(sessionId, handleId, sdp) {
         }
     };
 
-    var path = '/janus/' + sessionId + '/' + handleId;
+    var path = '/janus/' + session_id + '/' + handleId;
     postData(path, request)
         .then(res => {
             var janus_result = res.janus;
