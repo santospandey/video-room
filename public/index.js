@@ -65,6 +65,25 @@ async function start() {
     const localVideo = document.getElementById("localVideo");
     localVideo.srcObject = streams;
 
+    const mediaStream = await navigator.mediaDevices.getDisplayMedia();
+
+    var shareScreenResponse = await shareScreen(session.data.id, handle.data.id);
+    if(shareScreenResponse){
+        var response = shareScreenResponse.plugindata.data;
+        if(response.videoroom){
+            const roomId = response.room;
+            var register = {
+				request: "join",
+				room: roomId,
+				ptype: "publisher",
+				display: "santosh"
+			};
+            const joinScreenRoomResponse = await joinShareScreenRoom(session.data.id, handle.data.id, register);
+            
+        }
+    }
+
+
     // join videoroom as a publisher
     const joinRoom = await joinVideoRoom("publisher", session.data.id, handle.data.id);
     if (joinRoom.janus !== "ack") {
@@ -72,6 +91,7 @@ async function start() {
         return false;
     }
     console.log("Join video room as publisher success...", joinRoom);
+
 
     // Listen for events.
     try{
@@ -81,6 +101,42 @@ async function start() {
         console.error("Error get events ", err);
     }
 }
+
+function shareScreen(sessionId, handleId){
+    var transaction = uuid.v4();
+    var message = {
+        request: "create",
+        description: "description",
+        bitrate: 500000,
+        publishers: 1
+    };
+
+    var request = {
+        "janus": "message",
+        "apisecret": apisecret,
+        "transaction": transaction,
+        "body": message
+    };
+
+    var url = "/janus/"+sessionId+"/"+handleId; 
+
+    return postData(url, request);
+}
+
+function joinShareScreenRoom(sessionId, handleId, data){
+    var transaction = uuid.v4();
+    var request = {
+        "janus": "message",
+        "apisecret": apisecret,
+        "transaction": transaction,
+        "body": data
+    };
+
+    var url = "/janus/"+sessionId+"/"+handleId; 
+
+    return postData(url, request);
+}
+
 
 /**
  * Create Session in Janus
@@ -305,7 +361,7 @@ function joinVideoRoom(type, sessionId, handleId, publisherId) {
             "ptype": type,
             "room": 1234,
             "audio": true,
-            "video": true
+            "video": "screen"
         }
     };
 
