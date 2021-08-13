@@ -1,8 +1,12 @@
-// var janus_hostname = "192.168.1.109";
-var janus_hostname = "34.83.95.233";
+var janus_hostname = "192.168.1.109";
+// var janus_hostname = "34.83.95.233";
 var janus_port = 8088;
 var apisecret = "ZjNjY2JiODhiZjU1NDA0NDk3ZGViMGZlYjQwMDY0OGUuNWUyMGE0YmU5MjgzNDRmMDkwZWE1ZGYzMzFjNDExMGI=.7a086d1b1a82ef0e708a1970c1d93fa0eead676bf14ed2d235a76f20ebdb3c213f1ee20bf69926dc9df8a571973fb1afa1193bd19d6d028e11651b09ef53c114";
-var session_id = null;
+const mediaConstraints = {
+    offerToReceiveAudio: true,
+    offerToReceiveVideo: true,
+    iceRestart: true
+};
 
 async function postData(path, data) {
     const url = "http://" + janus_hostname + ":" + janus_port + path;
@@ -27,7 +31,6 @@ async function start() {
         return false;
     }
     console.log("Create session success ...", session);
-    session_id = session.data.id;
 
     // attach plugin
     var handle = await attachPlugin(session.data.id);
@@ -38,7 +41,18 @@ async function start() {
     console.log("Attach videoroom plugin success...", handle);
 
     // start rtc peer connection.
-    const localPeer = startLocalPeer(true, true, session.data.id, handle.data.id);
+    const localPeer = getPeerConnection();
+
+    localPeer.onnegotiationneeded = () => {
+        localPeer.createOffer(mediaConstraints)
+            .then(offer => localPeer.setLocalDescription(offer))
+            .then(() => {
+                sendSDP(session.data.id, handle.data.id, localPeer.localDescription);
+            })
+            .catch(err => {
+                console.log("Error while creating offer ", err);
+            })
+    }
 
     // get audio and video streams.
     const streams = await getMediaDevicesStream(true, true);
@@ -60,7 +74,12 @@ async function start() {
     console.log("Join video room as publisher success...", joinRoom);
 
     // Listen for events.
-    getEvents(session.data.id, localPeer);
+    try{
+        getEvents(session.data.id, localPeer);
+    }
+    catch(err){
+        console.error("Error get events ", err);
+    }
 }
 
 /**
@@ -77,7 +96,6 @@ function createSession() {
     return postData("/janus", request);
 }
 
-var localPeer;
 
 /**
  * @param {*} publisherId 
@@ -98,17 +116,10 @@ function attachPlugin(sessionId) {
 /**
  * 
  * @param {*} offerAudio 
- * @param {*} offerVideo 
- * @param {*} sessionId 
- * @param {*} handleId 
+ * @param {*} offerVideo
  * @returns 
  */
-function startLocalPeer(offerAudio, offerVideo, sessionId, handleId) {
-    const mediaConstraints = {
-        offerToReceiveAudio: offerAudio,
-        offerToReceiveVideo: offerVideo,
-        iceRestart: true
-    }
+function getPeerConnection() {    
     const localPeer = new RTCPeerConnection({
         iceServers: [
             {
@@ -116,17 +127,6 @@ function startLocalPeer(offerAudio, offerVideo, sessionId, handleId) {
             }
         ]
     });
-
-    localPeer.onnegotiationneeded = async () => {
-        localPeer.createOffer(mediaConstraints)
-            .then(offer => localPeer.setLocalDescription(offer))
-            .then(() => {
-                sendSDP(sessionId, handleId, localPeer.localDescription);
-            })
-            .catch(err => {
-                console.log("Error while creating offer ", err);
-            })
-    }
 
     return localPeer;
 }
@@ -249,7 +249,7 @@ function handleEvents(res, localPeer) {
                     res.plugindata.data.publishers.forEach(p => {
                         attachPlugin(res.session_id)
                             .then(handle => {
-                                if (handle.janus === "success") {                                    
+                                if (handle.janus === "success") {
                                     joinVideoRoom("subscriber", res.session_id, handle.data.id, p.id)
                                         .then(response => {
                                             if (response.janus === "ack") {
@@ -262,49 +262,26 @@ function handleEvents(res, localPeer) {
                 }
             }
             if ((res.plugindata.data.videoroom === "attached") && res.jsep) {
-                console.log("got sdp from janus ", res);
-                let remoteVideo = document.createElement("video");
+                const parentElement = document.getElementById("remote-video");
+                const remoteVideo = document.createElement("video");
                 remoteVideo.setAttribute("autoplay", "true");
                 remoteVideo.setAttribute("playsinline", "true");
                 remoteVideo.setAttribute("width", "250px");
                 remoteVideo.setAttribute("height", "250px");
 
-                const mediaConstraints = {
-                    mandatory: {
-                        OfferToReceiveAudio: true,
-                        OfferToReceiveVideo: true,
-                    },
-                };
-
-                const remotePeer = new RTCPeerConnection({
-                    iceServers: [
-                        {
-                            urls: "stun:stun.stunprotocol.org"
-                        }
-                    ]
-                });
+                const remotePeer = getPeerConnection();
 
                 remotePeer.setRemoteDescription(res.jsep)
-                    .then(() => {
-                        console.log("Answering offer ");
-                    })
-                remotePeer.createAnswer(mediaConstraints)
-                    .then(offer => {
-                        console.log("offer => ", offer);
-                        return remotePeer.setLocalDescription(offer);
-                    })
-                    .then(() => {
-                        sendAnswer(res.session_id, res.sender, remotePeer.localDescription.sdp);
-                    })
-                    .catch(err => {
-                        console.log("Error => ", err);
-                    })
+                    .then(() => console.log("Answering offer "))
 
-                remotePeer.ontrack = function (event) {
-                    console.log("Remote track: ", event);
+                remotePeer.createAnswer(mediaConstraints)
+                    .then(offer => remotePeer.setLocalDescription(offer))
+                    .then(() => sendAnswer(res.session_id, res.sender, remotePeer.localDescription.sdp))
+                    .catch(err => console.error("Error => ", err))
+
+                remotePeer.ontrack = (event) => {
                     remoteVideo.srcObject = event.streams[0];
-                    const parent = document.getElementById("remote-video");
-                    parent.appendChild(remoteVideo);
+                    parentElement.appendChild(remoteVideo);
                 }
             }
         }
