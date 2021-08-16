@@ -1,7 +1,11 @@
 var janus_hostname = "192.168.1.109";
 // var janus_hostname = "34.83.95.233";
 var janus_port = 8088;
-var apisecret = "ZjNjY2JiODhiZjU1NDA0NDk3ZGViMGZlYjQwMDY0OGUuNWUyMGE0YmU5MjgzNDRmMDkwZWE1ZGYzMzFjNDExMGI=.7a086d1b1a82ef0e708a1970c1d93fa0eead676bf14ed2d235a76f20ebdb3c213f1ee20bf69926dc9df8a571973fb1afa1193bd19d6d028e11651b09ef53c114";
+var room = null;
+var sessionId = null;
+var pluginHandleId = null;
+var localPeer = null;
+var apisecret = "ZjNjY2JiODhiZjU1NDA0NDk3ZGViMGZlYjQwMDY0OGUuOGY5Mjk2ZmY5ODE5NDhlZWE5MzM1NDI2NGRiNTcxZDI=.395556943fa7177d84a7de3e69331104084155a01565eb83df0ca18cf0c7d3378f5a3d6a964705668cfde35d41bfb8bbc8d555d2fe150ab33c983d00fb05f9f7";
 const mediaConstraints = {
     offerToReceiveAudio: true,
     offerToReceiveVideo: true,
@@ -31,6 +35,7 @@ async function start() {
         return false;
     }
     console.log("Create session success ...", session);
+    sessionId = session.data.id;
 
     // attach plugin
     var handle = await attachPlugin(session.data.id);
@@ -39,21 +44,53 @@ async function start() {
         return false;
     }
     console.log("Attach videoroom plugin success...", handle);
+    pluginHandleId = handle.data.id;
 
-    // start rtc peer connection.
-    const localPeer = getPeerConnection();
-
-    localPeer.onnegotiationneeded = () => {
-        localPeer.createOffer(mediaConstraints)
-            .then(offer => localPeer.setLocalDescription(offer))
-            .then(() => {
-                sendSDP(session.data.id, handle.data.id, localPeer.localDescription);
-            })
-            .catch(err => {
-                console.log("Error while creating offer ", err);
-            })
+    var shareScreenResponse = await shareScreen(session.data.id, handle.data.id);
+    if(shareScreenResponse){
+        var response = shareScreenResponse.plugindata.data;
+        if(response.videoroom){
+            const roomId = response.room;
+            room = roomId;
+            console.log("Room Id => ", room);
+            var register = {
+				request: "join",
+				room: roomId,
+				ptype: "publisher",
+				display: "santosh"
+			};
+            const joinScreenRoomResponse = await joinShareScreenRoom(session.data.id, handle.data.id, register);
+            if(joinScreenRoomResponse.janus === "ack"){
+                console.log("successfully joined room as publisher for screen sharing.");
+            }
+        }
     }
 
+
+    // join videoroom as a publisher
+    // const joinRoom = await joinVideoRoom("publisher", session.data.id, handle.data.id);
+    // if (joinRoom.janus !== "ack") {
+    //     console.error("Error in joining videoroom as publisher ", joinRoom);
+    //     return false;
+    // }
+    // console.log("Join video room as publisher success...", joinRoom);
+
+    // start rtc peer connection.
+    localPeer = getPeerConnection();
+
+    // localPeer.onnegotiationneeded = () => {
+    //     localPeer.createOffer({
+    //         video: "screen"
+    //     })
+    //         .then(offer => localPeer.setLocalDescription(offer))
+    //         .then(() => {
+    //             sendSDP(sessionId, pluginHandleId, localPeer.localDescription);
+    //         })
+    //         .catch(err => {
+    //             console.log("Error while creating offer ", err);
+    //         })
+    // }
+    
     // get audio and video streams.
     const streams = await getMediaDevicesStream(true, true);
 
@@ -65,34 +102,6 @@ async function start() {
     const localVideo = document.getElementById("localVideo");
     localVideo.srcObject = streams;
 
-    const mediaStream = await navigator.mediaDevices.getDisplayMedia();
-
-    var shareScreenResponse = await shareScreen(session.data.id, handle.data.id);
-    if(shareScreenResponse){
-        var response = shareScreenResponse.plugindata.data;
-        if(response.videoroom){
-            const roomId = response.room;
-            var register = {
-				request: "join",
-				room: roomId,
-				ptype: "publisher",
-				display: "santosh"
-			};
-            const joinScreenRoomResponse = await joinShareScreenRoom(session.data.id, handle.data.id, register);
-            
-        }
-    }
-
-
-    // join videoroom as a publisher
-    const joinRoom = await joinVideoRoom("publisher", session.data.id, handle.data.id);
-    if (joinRoom.janus !== "ack") {
-        console.error("Error in joining videoroom as publisher ", joinRoom);
-        return false;
-    }
-    console.log("Join video room as publisher success...", joinRoom);
-
-
     // Listen for events.
     try{
         getEvents(session.data.id, localPeer);
@@ -100,6 +109,7 @@ async function start() {
     catch(err){
         console.error("Error get events ", err);
     }
+
 }
 
 function shareScreen(sessionId, handleId){
@@ -199,7 +209,8 @@ function getMediaDevicesStream(audio, video) {
         "video": video
     };
     if (navigator && navigator.mediaDevices) {
-        return navigator.mediaDevices.getUserMedia(constraints);
+        // return navigator.mediaDevices.getUserMedia(constraints);
+        return navigator.mediaDevices.getDisplayMedia();
     }
 }
 
@@ -282,12 +293,22 @@ function getEvents(sessionId, localPeer) {
  * @param {*} res 
  * @param {*} localPeer 
  */
-function handleEvents(res, localPeer) {
+async function handleEvents(res, localPeer) {
     var janus_result = res.janus;
     if (janus_result == "event") {
         if (res.plugindata && res.plugindata.data) {
             if (res.plugindata.data.videoroom === "joined") {
                 console.log("Joined as a publisher ...");
+                localPeer.createOffer({
+                    video: "screen"
+                })
+                .then(offer => localPeer.setLocalDescription(offer))
+                .then(() => {
+                    sendSDP(sessionId, pluginHandleId, localPeer.localDescription);
+                })
+                .catch(err => {
+                    console.log("Error while creating offer ", err);
+                })
             }
             if (res.plugindata.data.videoroom === "event") {
                 if (res.plugindata.data.configured === 'ok') {
@@ -359,7 +380,7 @@ function joinVideoRoom(type, sessionId, handleId, publisherId) {
         "body": {
             "request": "join",
             "ptype": type,
-            "room": 1234,
+            "room": room,
             "audio": true,
             "video": "screen"
         }
