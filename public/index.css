@@ -20,19 +20,13 @@
   }
   
   #localVideo {
-    width: 150px;
-    height: 150px;
-  }
-  
-  .remote-video {}
-  
-  #remoteVideo {
-    width: 250px;
+    width: 350px;
     height: 250px;
   }
   
-  #userId {
-    display: none;
+  #remoteVideo {
+    width: 350px;
+    height: 250px;
   }
   
   .user-item {
