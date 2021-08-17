@@ -44,6 +44,7 @@ async function start() {
     const localPeer = getPeerConnection();
 
     localPeer.onnegotiationneeded = () => {
+        console.log("creating local peer offer ...");
         localPeer.createOffer(mediaConstraints)
             .then(offer => localPeer.setLocalDescription(offer))
             .then(() => {
