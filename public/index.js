@@ -1,7 +1,7 @@
 var janus_hostname = "192.168.1.109";
 // var janus_hostname = "34.83.95.233";
 var janus_port = 8088;
-var apisecret = "ZjNjY2JiODhiZjU1NDA0NDk3ZGViMGZlYjQwMDY0OGUuNWUyMGE0YmU5MjgzNDRmMDkwZWE1ZGYzMzFjNDExMGI=.7a086d1b1a82ef0e708a1970c1d93fa0eead676bf14ed2d235a76f20ebdb3c213f1ee20bf69926dc9df8a571973fb1afa1193bd19d6d028e11651b09ef53c114";
+var apisecret = "ZjNjY2JiODhiZjU1NDA0NDk3ZGViMGZlYjQwMDY0OGUuOGY5Mjk2ZmY5ODE5NDhlZWE5MzM1NDI2NGRiNTcxZDI=.395556943fa7177d84a7de3e69331104084155a01565eb83df0ca18cf0c7d3378f5a3d6a964705668cfde35d41bfb8bbc8d555d2fe150ab33c983d00fb05f9f7";
 const mediaConstraints = {
     offerToReceiveAudio: true,
     offerToReceiveVideo: true,
