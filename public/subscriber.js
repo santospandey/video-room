@@ -26,15 +26,15 @@ async function postData(path, data) {
 
 
 document.querySelector("#subscribe").addEventListener("click", function(e){
-    room = document.querySelector("#roomId").value;
-
+    room = parseInt(document.querySelector("#roomId").value);
+    start(room);
 })
 
 
 /**
  * Main function to start videoroom.
  */
-async function start() {
+async function start(roomId) {
     // create session.
     var session = await createSession();
     if (session.janus !== "success") {
@@ -53,51 +53,21 @@ async function start() {
     console.log("Attach videoroom plugin success...", handle);
     pluginHandleId = handle.data.id;
 
-    var shareScreenResponse = await shareScreen(session.data.id, handle.data.id);
-    if(shareScreenResponse){
-        var response = shareScreenResponse.plugindata.data;
-        if(response.videoroom){
-            const roomId = response.room;
-            room = roomId;
-            console.log("Screen share create room success");
-            console.log("Room Id => ", room);
-            var register = {
-				request: "join",
-				room: roomId,
-				ptype: "publisher",
-				display: "santosh"
-			};
-            const joinScreenRoomResponse = await joinShareScreenRoom(session.data.id, handle.data.id, register);
-            if(joinScreenRoomResponse.janus === "ack"){
-                console.log("successfully joined room as publisher for screen sharing.");
-            }
-        }
+    var register = {
+        request: "join",
+        room: roomId,
+        ptype: "publisher",
+        display: "santosh"
+    };
+    const joinScreenRoomResponse = await joinShareScreenRoom(session.data.id, handle.data.id, register);
+    if(joinScreenRoomResponse.janus === "ack"){
+        console.log("successfully joined room as publisher for screen sharing.");
     }
 
-
-    // join videoroom as a publisher
-    // const joinRoom = await joinVideoRoom("publisher", session.data.id, handle.data.id);
-    // if (joinRoom.janus !== "ack") {
-    //     console.error("Error in joining videoroom as publisher ", joinRoom);
-    //     return false;
-    // }
-    // console.log("Join video room as publisher success...", joinRoom);
+    /*
 
     // start rtc peer connection.
     localPeer = getPeerConnection();
-
-    // localPeer.onnegotiationneeded = () => {
-    //     localPeer.createOffer({
-    //         video: "screen"
-    //     })
-    //         .then(offer => localPeer.setLocalDescription(offer))
-    //         .then(() => {
-    //             sendSDP(sessionId, pluginHandleId, localPeer.localDescription);
-    //         })
-    //         .catch(err => {
-    //             console.log("Error while creating offer ", err);
-    //         })
-    // }
     
     // get audio and video streams.
     const streams = await getMediaDevicesStream(true, true);
@@ -109,6 +79,7 @@ async function start() {
     streams.getTracks().forEach(track => localPeer.addTrack(track, streams));
     const localVideo = document.getElementById("localVideo");
     localVideo.srcObject = streams;
+*/
 
     // Listen for events.
     try{
@@ -307,35 +278,15 @@ async function handleEvents(res, localPeer) {
         if (res.plugindata && res.plugindata.data) {
             if (res.plugindata.data.videoroom === "joined") {
                 console.log("Joined as a publisher ...");
-                localPeer.createOffer({
-                    video: "screen"
-                })
-                .then(offer => localPeer.setLocalDescription(offer))
-                .then(() => {
-                    sendSDP(sessionId, pluginHandleId, localPeer.localDescription);
-                })
-                .catch(err => {
-                    console.log("Error while creating offer ", err);
-                })
-            }
-            if (res.plugindata.data.videoroom === "event") {
-                if (res.plugindata.data.configured === 'ok') {
-                    console.log("Publisher configured ...");
-                    if (res.jsep) {
-                        localPeer.setRemoteDescription(res.jsep)
-                            .then(() => {
-                                console.log("Set Remote.");
-                            })
-                    }
-                }
-                var length = res.plugindata.data.publishers && res.plugindata.data.publishers.length;
-                if (length) {
-                    console.log("Got a new publishers ", res.plugindata.data.publishers);
-                    res.plugindata.data.publishers.forEach(p => {
+                if(res.plugindata.data.publishers && res.plugindata.data.publishers.length){
+                    var list = res.plugindata.data.publishers;
+                    for(var f in list){
+                        var id = list[f]["id"];
+                        var display = list[f]["display"];
                         attachPlugin(res.session_id)
                             .then(handle => {
                                 if (handle.janus === "success") {
-                                    joinVideoRoom("subscriber", res.session_id, handle.data.id, p.id)
+                                    joinVideoRoom("listener", res.session_id, handle.data.id, id)
                                         .then(response => {
                                             if (response.janus === "ack") {
                                                 console.log("Successfully joined videoroom as a subscriber");
@@ -343,8 +294,11 @@ async function handleEvents(res, localPeer) {
                                         })
                                 }
                             })
-                    });
+                    }
                 }
+            }
+            if (res.plugindata.data.videoroom === "event") {
+                
             }
             if ((res.plugindata.data.videoroom === "attached") && res.jsep) {
                 const parentElement = document.getElementById("remote-video");
@@ -373,6 +327,7 @@ async function handleEvents(res, localPeer) {
     }
 }
 
+
 /**
  * 
  * @param {*} type => publisher or subscriber
@@ -388,9 +343,7 @@ function joinVideoRoom(type, sessionId, handleId, publisherId) {
         "body": {
             "request": "join",
             "ptype": type,
-            "room": room,
-            "audio": true,
-            "video": "screen"
+            "room": room
         }
     };
 
@@ -437,5 +390,3 @@ function sendAnswer(sessionId, handleId, sdp) {
             }
         })
 }
-
-start();
