@@ -12,6 +12,24 @@ const mediaConstraints = {
     iceRestart: true
 };
 
+
+// We'll try to do 15 frames per second: should be relatively fluid, and
+// most important should be doable in JavaScript on lower end machines too
+var fps = 15;
+// Let's add some placeholders for the tweaks we can configure
+var myText = "Hi there!";
+var myColor = "white";
+var myFont = "20pt Calibri";
+var myX = 15, myY = 223;
+// As the "watermark", we'll use a smaller version of the Janus logo
+var logoUrl = "./janus-logo-small.png";
+var logoW = 340, logoH = 110;
+var logoS = 0.4;
+var logoX = 432 - logoW*logoS - 5, logoY = 5;
+var logoUrl = "./janus-logo-small.png";
+
+
+
 async function postData(path, data) {
     const url = "http://" + janus_hostname + ":" + janus_port + path;
     const response = await fetch(url, {
@@ -307,8 +325,44 @@ async function handleEvents(res, localPeer) {
         if (res.plugindata && res.plugindata.data) {
             if (res.plugindata.data.videoroom === "joined") {
                 console.log("Joined as a publisher ...");
+
+                $('#text').val(myText);
+                $('#color').val(myColor);
+                $('#font').val(myFont);
+                $('#posX').val(""+myX);
+                $('#posY').val(""+myY);
+
+                var canvas = document.getElementById('canvas');
+				var context = canvas.getContext('2d');
+				var logo = new Image();
+				logo.onload = function() {
+					(function loop() {
+						if(!myvideo.paused && !myvideo.ended) {
+							// Copy video to image
+							context.drawImage(myvideo, 0, 0);
+							// Add logo
+							context.drawImage(logo,
+								0, 0, logoW, logoH,
+								logoX, logoY, logoW*logoS, logoH*logoS);
+							// Add some text
+							context.fillStyle = 'rgba(0,0,0,0.5)';
+							context.fillRect(0, 190, 432,240);
+							context.font = myFont;
+							context.fillStyle = myColor;
+							context.fillText(myText, myX, myY);
+							// We're drawing at the specified fps
+							setTimeout(loop, 1000 / fps);
+						}
+					})();
+				};
+
+				logo.src = logoUrl;
+				// Capture the canvas as a local MediaStream
+				canvasStream = canvas.captureStream();
+
                 localPeer.createOffer({
-                    video: "screen"
+                    video: "screen",
+                    stream: canvasStream
                 })
                 .then(offer => localPeer.setLocalDescription(offer))
                 .then(() => {
@@ -437,5 +491,25 @@ function sendAnswer(sessionId, handleId, sdp) {
             }
         })
 }
+
+// Helper function to update a canvas when the tweaks are used
+function updateCanvas() {
+	myText = $('#text').val();
+	myColor = $('#color').val();
+	myFont = $('#font').val();
+	myX = parseInt($('#posX').val());
+	myY = parseInt($('#posY').val());
+}
+
+function checkEnter(event) {
+	var theCode = event.keyCode ? event.keyCode : event.which ? event.which : event.charCode;
+	if(theCode == 13) {
+		updateCanvas();
+		return false;
+	} else {
+		return true;
+	}
+}
+
 
 start();
