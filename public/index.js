@@ -5,7 +5,7 @@ var room = null;
 var sessionId = null;
 var pluginHandleId = null;
 var localPeer = null;
-var apisecret = "ZjNjY2JiODhiZjU1NDA0NDk3ZGViMGZlYjQwMDY0OGUuOGY5Mjk2ZmY5ODE5NDhlZWE5MzM1NDI2NGRiNTcxZDI=.395556943fa7177d84a7de3e69331104084155a01565eb83df0ca18cf0c7d3378f5a3d6a964705668cfde35d41bfb8bbc8d555d2fe150ab33c983d00fb05f9f7";
+var apisecret = "";
 const mediaConstraints = {
     offerToReceiveAudio: true,
     offerToReceiveVideo: true,
