@@ -259,7 +259,7 @@ function getEvents(sessionId, localPeer) {
             "Content-Type": "application/json"
         }
     })
-        .then(data => data.json())
+        .then(data => data && data.json())
         .then(res => {
             console.log("get event from janus => ", res);
             handleEvents(res, localPeer);

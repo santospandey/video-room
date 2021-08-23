@@ -1,5 +1,5 @@
-var janus_hostname = "192.168.1.109";
-// var janus_hostname = "34.83.95.233";
+// var janus_hostname = "192.168.1.109";
+var janus_hostname = "34.83.95.233";
 var janus_port = 8088;
 var room = null;
 var sessionId = null;
@@ -23,13 +23,6 @@ async function postData(path, data) {
     });
     return response.json();
 }
-
-
-document.querySelector("#subscribe").addEventListener("click", function(e){
-    room = document.querySelector("#roomId").value;
-
-})
-
 
 /**
  * Main function to start videoroom.
@@ -294,6 +287,9 @@ function getEvents(sessionId, localPeer) {
             handleEvents(res, localPeer);
             getEvents(sessionId, localPeer);
         })
+        .catch(err => {
+            console.error("Error in get events ", err);
+        })
 }
 
 /**
@@ -307,17 +303,18 @@ async function handleEvents(res, localPeer) {
         if (res.plugindata && res.plugindata.data) {
             if (res.plugindata.data.videoroom === "joined") {
                 console.log("Joined as a publisher ...");
-                localPeer.createOffer({
-                    video: "screen"
-                })
+                localPeer.createOffer()
                 .then(offer => localPeer.setLocalDescription(offer))
                 .then(() => {
+                    debugger;
                     sendSDP(sessionId, pluginHandleId, localPeer.localDescription);
                 })
                 .catch(err => {
                     console.log("Error while creating offer ", err);
                 })
             }
+
+
             if (res.plugindata.data.videoroom === "event") {
                 if (res.plugindata.data.configured === 'ok') {
                     console.log("Publisher configured ...");
@@ -328,47 +325,50 @@ async function handleEvents(res, localPeer) {
                             })
                     }
                 }
-                var length = res.plugindata.data.publishers && res.plugindata.data.publishers.length;
-                if (length) {
-                    console.log("Got a new publishers ", res.plugindata.data.publishers);
-                    res.plugindata.data.publishers.forEach(p => {
-                        attachPlugin(res.session_id)
-                            .then(handle => {
-                                if (handle.janus === "success") {
-                                    joinVideoRoom("subscriber", res.session_id, handle.data.id, p.id)
-                                        .then(response => {
-                                            if (response.janus === "ack") {
-                                                console.log("Successfully joined videoroom as a subscriber");
-                                            }
-                                        })
-                                }
-                            })
-                    });
-                }
+                // var length = res.plugindata.data.publishers && res.plugindata.data.publishers.length;
+                // if (length) {
+                //     console.log("Got a new publishers ", res.plugindata.data.publishers);
+                //     res.plugindata.data.publishers.forEach(p => {
+                //         attachPlugin(res.session_id)
+                //             .then(handle => {
+                //                 if (handle.janus === "success") {
+                //                     joinVideoRoom("subscriber", res.session_id, handle.data.id, p.id)
+                //                         .then(response => {
+                //                             if (response.janus === "ack") {
+                //                                 console.log("Successfully joined videoroom as a subscriber");
+                //                             }
+                //                         })
+                //                 }
+                //             })
+                //     });
+                // }
             }
-            if ((res.plugindata.data.videoroom === "attached") && res.jsep) {
-                const parentElement = document.getElementById("remote-video");
-                const remoteVideo = document.createElement("video");
-                remoteVideo.setAttribute("autoplay", "true");
-                remoteVideo.setAttribute("playsinline", "true");
-                remoteVideo.setAttribute("width", "250px");
-                remoteVideo.setAttribute("height", "250px");
 
-                const remotePeer = getPeerConnection();
 
-                remotePeer.setRemoteDescription(res.jsep)
-                    .then(() => console.log("Answering offer "))
 
-                remotePeer.createAnswer(mediaConstraints)
-                    .then(offer => remotePeer.setLocalDescription(offer))
-                    .then(() => sendAnswer(res.session_id, res.sender, remotePeer.localDescription.sdp))
-                    .catch(err => console.error("Error => ", err))
+            // if ((res.plugindata.data.videoroom === "attached") && res.jsep) {                
+            //     const parentElement = document.getElementById("remote-video");
+            //     const remoteVideo = document.createElement("video");
+            //     remoteVideo.setAttribute("autoplay", "true");
+            //     remoteVideo.setAttribute("playsinline", "true");
+            //     remoteVideo.setAttribute("width", "250px");
+            //     remoteVideo.setAttribute("height", "250px");
 
-                remotePeer.ontrack = (event) => {
-                    remoteVideo.srcObject = event.streams[0];
-                    parentElement.appendChild(remoteVideo);
-                }
-            }
+            //     const remotePeer = getPeerConnection();
+
+            //     remotePeer.setRemoteDescription(res.jsep)
+            //         .then(() => console.log("Answering offer "))
+
+            //     remotePeer.createAnswer(mediaConstraints)
+            //         .then(offer => remotePeer.setLocalDescription(offer))
+            //         .then(() => sendAnswer(res.session_id, res.sender, remotePeer.localDescription.sdp))
+            //         .catch(err => console.error("Error => ", err))
+
+            //     remotePeer.ontrack = (event) => {
+            //         remoteVideo.srcObject = event.streams[0];
+            //         parentElement.appendChild(remoteVideo);
+            //     }
+            // }
         }
     }
 }
